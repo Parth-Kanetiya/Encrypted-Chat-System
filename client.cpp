@@ -18,11 +18,6 @@ using namespace std;
 #include <thread>
 #include <mutex>
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-
 // POSIX socket headers
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -38,10 +33,10 @@ using namespace std;
 string g_key;           // shared encryption key from server
 
 
-//Check if we can replace this with a simple bool g_running = true; and remove the atomic header and include
-// g_running = true;
-// atomic<bool> g_running(true);
-bool g_running(true);
+//Check if we can replace this with a simple bool is_Running = true; and remove the atomic header and include
+// is_Running = true;
+// atomic<bool> is_Running(true);
+bool is_Running(true);
 
 
 
@@ -90,17 +85,22 @@ void encSend(int fd, const string& type, const string& plaintext) {
 // ─────────────────────────────────────────────
 void receiveLoop(int fd) {
     char buf[4096];
-    while (g_running) {
+    while (is_Running) {
         memset(buf, 0, sizeof(buf));
         int n = recv(fd, buf, sizeof(buf) - 1, 0);
         if (n <= 0) {
             cout << "\n[!] Disconnected from server.\n";
-            g_running = false;
+            is_Running = false;
             break;
         }
 
-        string packet(buf, n);
+
         
+        string packet(buf, n);
+        // string packet(buf);
+        
+
+
         // Strip newline
         while (!packet.empty() && (packet.back() == '\n' || packet.back() == '\r'))
             packet.pop_back();
@@ -131,9 +131,9 @@ void receiveLoop(int fd) {
 
         // MSG — broadcast: format is  MSG|sender:hexPayload
         if (type == Protocol::MSG) {
-            // size_t colon = data.find('|');
-            size_t colon = data.find(':');
+            size_t colon = data.find(':');//sender:hexPayload
             if (colon == string::npos) continue;
+
             string sender     = data.substr(0, colon);
             string hexPayload = data.substr(colon + 1);
             // CLIENT decrypts the payload — server never could
@@ -185,7 +185,8 @@ void receiveLoop(int fd) {
 
         // ERROR
         if (type == Protocol::ERROR_MSG) {
-            cout << "\n\033[31m[ERROR] " << data << "\033[0m\n> " << flush;
+            string plain_error = xorCipher(fromHex(data), g_key);
+            cout << "\n\033[31m[ERROR] " << plain_error << "\033[0m\n> " << flush;
             continue;
         }
     }
@@ -194,15 +195,16 @@ void receiveLoop(int fd) {
 // ─────────────────────────────────────────────
 //  MAIN
 // ─────────────────────────────────────────────
-int main(int argc, char* argv[]) {
+int main() {
+// int main(int argc, char* argv[]) {
     // string SERVER_IP   = "10.196.60.233";
     // string SERVER_IP   = "10.196.63.250";
     // string SERVER_IP   = "172.21.218.228";
     string SERVER_IP   = "127.0.0.1";
     int         SERVER_PORT = 8080;
 
-    if (argc > 1) SERVER_IP   = argv[1];
-    if (argc > 2) SERVER_PORT = stoi(argv[2]);
+    // if (argc > 1) SERVER_IP   = argv[1];
+    // if (argc > 2) SERVER_PORT = stoi(argv[2]);
 
     cout << "╔══════════════════════════════════════╗\n";
     cout << "║     SECURE CHAT CLIENT               ║\n";
@@ -247,9 +249,9 @@ int main(int argc, char* argv[]) {
     while (true) {
         cout << "Enter username: ";
         
-        
-        //Check if we can replace this with a simple cin >> username; and remove the getline above
         getline(cin, username);
+        //Check if we can replace this with a simple cin >> username; and remove the getline above
+        // cin>>username;
 
         
 
@@ -284,7 +286,10 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Start receive thread ──
+    
     thread(receiveLoop, fd).detach();
+
+
 
     // ── Print help ──
     cout << "──────────────────────────────────────\n";
@@ -296,11 +301,11 @@ int main(int argc, char* argv[]) {
 
     // ── Main input loop ──
     string input;
-    while (g_running) {
+    while (is_Running) {
         cout << "> ";
 
-
-        if (!getline(cin, input)) break;
+        getline(cin, input);
+        // if (!getline(cin, input)) break;
         // Check if we can replace this with a simple cin >> input; and remove the getline above
 
 
@@ -329,7 +334,7 @@ int main(int argc, char* argv[]) {
                 message = message.substr(1);
 
             if (receiver.empty() || message.empty()) {
-                cout << "[!] Usage: /msg <user> <message>\n";
+                cout << "[!] Error: /msg <user> <message>\n";
                 continue;
             }
 
@@ -344,7 +349,7 @@ int main(int argc, char* argv[]) {
         encSend(fd, Protocol::MSG, input);
     }
 
-    g_running = false;
+    is_Running = false;
     close(fd);
     return 0;
 }

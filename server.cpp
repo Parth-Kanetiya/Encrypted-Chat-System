@@ -218,6 +218,12 @@ void handleClient(int fd) {
             if(receiver_fd == -1){
                 encSend(fd, Protocol::ERROR_MSG, "User '" + receiver + "' not found.");
             }
+
+            else if(receiver_fd == fd){
+                encSend(fd, Protocol::ERROR_MSG, "You cannot send a direct message to yourself.");
+            }
+
+            
             else{
 
 
